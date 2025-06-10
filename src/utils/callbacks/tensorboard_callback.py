@@ -62,15 +62,27 @@ class TensorboardCallback(BaseCallback):
 
     
     def _on_training_end(self):
-        # Guardar mapas de exploración al final del entrenamiento
-        explore_map = np.array(self.training_env.get_attr("explore_map"))
-        map_sum = reduce(explore_map, "f h w -> h w", "max")
+        # Guardar mapas de exploración derivados del visit_count_map al final del entrenamiento
+
+        # 1. Obtener los visit_count_map de todos los entornos paralelos
+        # Esto asume que self.training_env es un VecEnv y get_attr devolverá una lista de mapas.
+        all_visit_maps = self.training_env.get_attr("visit_count_map")
+
+        # 2. Convertir cada visit_count_map a su representación de "mapa de exploración"
+        # Donde un valor > 0 en visit_count_map se convierte en 255 (explorado), y 0 en 0.
+        # Stackeamos todos los mapas derivados en un solo array numpy.
+        explore_maps_derived = np.array([(vm > 0).astype(np.uint8) * 255 for vm in all_visit_maps])
+
+        # 3. Usar el 'explore_maps_derived' para las operaciones de registro
+        # map_sum: Reduce todos los mapas derivados en un solo mapa consolidado (máximo de píxeles)
+        map_sum = reduce(explore_maps_derived, "f h w -> h w", "max")
         self.logger.record("trajectory/explore_sum", Image(map_sum, "HW"), exclude=("stdout", "log", "json", "csv"))
 
-        if explore_map.shape[0] == 1:
-            map_row = explore_map.squeeze(0)
+        # map_row: Reorganiza los mapas derivados en una única imagen grande para visualización
+        if explore_maps_derived.shape[0] == 1:
+            map_row = explore_maps_derived.squeeze(0) # Si solo hay un entorno, quita la dimensión 'f'
         else:
-            map_row = rearrange(explore_map, "(r f) h w -> (r h) (f w)", r=2)
+            map_row = rearrange(explore_maps_derived, "(r f) h w -> (r h) (f w)", r=2)
 
         self.logger.record("trajectory/explore_map", Image(map_row, "HW"), exclude=("stdout", "log", "json", "csv"))
 

@@ -169,4 +169,5 @@ class MemoryReader:
         map = self.read_progress_map()
         return (x,y,map)
 
-    
+    def get_event_flags(self):
+        return (MemoryAddresses.EVENT_FLAGS_START.value,MemoryAddresses.EVENT_FLAGS_END.value)
