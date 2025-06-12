@@ -60,11 +60,9 @@ class PokemonRedEnv(Env):
                 "health": spaces.Box(low=0, high=1),
                 "badges": spaces.Discrete(8),
                 "events": spaces.MultiBinary(self.memory_reader.get_difference_between_events()),
-                #"map": spaces.Box(low=0, high=255, shape=(self.coords_pad*4,self.coords_pad*4, 1), dtype=np.uint8),
                 "visit_map": spaces.Box(low=0.0, high=1.0, shape=(self.output_shape_main[0], self.output_shape_main[1], 1), dtype=np.float32),
                 "recent_actions": spaces.MultiDiscrete([len(self.emulator.VALID_ACTIONS)]*self.quantity_action_storage),
                 "remaining_ratio": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
-                #"coords": spaces.Box(low=0, high=np.inf, shape=(3,), dtype=np.int32),
                 "in_combat" : spaces.MultiBinary(1),
             }
         )
@@ -126,9 +124,7 @@ class PokemonRedEnv(Env):
         self.is_in_battle = False
         self.batges_in_possesion = 0
         self.x, self.y, self.m = 0,0,0
-        ##Vision
 
-        #Events
         self.base_event_flags = self.memory_reader.read_events_done()
         self.all_event_flags_set_history = set()
         self.current_new_events = []
@@ -161,7 +157,7 @@ class PokemonRedEnv(Env):
         self.update_heal_reward()
         self.update_visit_map()
         self.update_events()
-        #self.compute_global_stuck()
+        self.compute_global_stuck()
 
 
         new_reward = self.update_reward()
@@ -190,10 +186,8 @@ class PokemonRedEnv(Env):
             "health": np.array([self.read_hp_fraction()]),
             "badges": self.batges_in_possesion,
             "events": np.array(self.memory_reader.read_event_bits(), dtype=np.int8),
-            #"map": self.get_explore_map()[:, :, None],
             "recent_actions": self.recent_actions,
             "remaining_ratio":  np.array([self.get_remaining_in_current_region()], dtype=np.float32),
-            #"coords": np.array([self.x,self.y,self.m], dtype=np.int32),
             "visit_map": self.get_visit_map_crop(),  # visitas normalizadas
             "in_combat": np.array([int(self.is_in_battle)], dtype=np.uint8)
         }
@@ -271,9 +265,9 @@ class PokemonRedEnv(Env):
 
             # Incrementar el número de veces que se ha visitado la coordenada
             if coord_string in self.seen_coords:
-                self.seen_coords[coord_string]['count'] += 1
+                self.seen_coords[coord_string] += 1
             else:
-                self.seen_coords[coord_string] = {'count': 1}
+                self.seen_coords[coord_string] = 1
             
     
     def read_hp_fraction(self):
@@ -337,9 +331,9 @@ class PokemonRedEnv(Env):
             "heal": self.reward_scale * self.total_healing_rew * 0.0005,
             "dead": self.reward_scale * self.died_count,
             "badge": self.reward_scale * self.batges_in_possesion * 10,
-            "explore": self.reward_scale * self.get_exploration_reward() * 2,
+            "explore": self.reward_scale * self.get_exploration_reward(),
             "region": self.reward_scale * self.get_region_reward(),
-            "coord_explored" : self.reward_scale * len(self.seen_coords)*0.02
+            "coord_explored" : self.reward_scale * len(self.seen_coords)*0.02,
         }
     
     def update_heal_reward(self):
@@ -368,51 +362,6 @@ class PokemonRedEnv(Env):
            self.reward_region_exploration[int(region["id"])] = region_reward
         return sum(self.reward_region_exploration)
     
-    def compute_global_stuck(self):
-        """
-        Calcula un valor de 'stuck' basado en el número de casillas visitadas más de una vez.
-        """
-        self.stuck = sum( 1 for data in self.seen_coords.values() if data['count'] > 1)
-        return self.stuck
-    
-    def get_explore_map(self):
-        """
-        Devuelve el recorte del mapa de exploración (visitado/no visitado)
-        derivado de visit_count_map. Los valores serán 0 (no visitado) o 255 (visitado).
-        """
-        c = self.get_global_coords()
-        
-        # Inicializamos 'out' con ceros para casos fuera de límites o si el mapa está vacío
-        # El tamaño es coords_pad*2 x coords_pad*2, y el tipo es uint8 (para la salida 0 o 255)
-        out = np.zeros((self.coords_pad*2, self.coords_pad*2), dtype=np.uint8)
-
-        # Verificamos si las coordenadas están dentro de los límites del visit_count_map
-        if 0 <= c[0] < self.visit_count_map.shape[0] and 0 <= c[1] < self.visit_count_map.shape[1]:
-            # Extraemos el recorte del visit_count_map
-            # Usamos un slice seguro para evitar errores si el centro está cerca del borde
-            # y el recorte se extendería fuera del mapa.
-            # Aquí, 'slice' garantiza que solo se accedan a los índices válidos.
-            y_start = max(0, c[0] - self.coords_pad)
-            y_end = min(self.visit_count_map.shape[0], c[0] + self.coords_pad)
-            x_start = max(0, c[1] - self.coords_pad)
-            x_end = min(self.visit_count_map.shape[1], c[1] + self.coords_pad)
-
-            temp_crop_from_visits = self.visit_count_map[y_start:y_end, x_start:x_end]
-            
-            # Convertimos a binario: 255 si la cuenta es > 0 (visitado), 0 si es 0 (no visitado)
-            # Aseguramos que el tamaño del 'out' final sea el deseado, rellenando con ceros si el recorte es más pequeño
-            
-            # Calculamos dónde debería ir el recorte extraído dentro del 'out' final
-            out_y_start = self.coords_pad - (c[0] - y_start)
-            out_y_end = out_y_start + (y_end - y_start)
-            out_x_start = self.coords_pad - (c[1] - x_start)
-            out_x_end = out_x_start + (x_end - x_start)
-
-            out[out_y_start:out_y_end, out_x_start:out_x_end] = (temp_crop_from_visits > 0).astype(np.uint8) * 255
-    
-        # Redimensionamos el recorte final (out)
-        out = cv2.resize(out, (out.shape[1]*2, out.shape[0]*2), interpolation=cv2.INTER_NEAREST)
-        return out
         
     def update_visit_map(self):
         """
@@ -430,8 +379,6 @@ class PokemonRedEnv(Env):
         redimensionado a la forma de la pantalla principal.
         """
         c = self.get_global_coords()
-        # El tamaño inicial del crop sigue siendo el doble del padding para la extracción
-        # pero el redimensionamiento final será al tamaño de la pantalla
         crop_initial_size = self.coords_pad * 2
         crop = np.zeros((crop_initial_size, crop_initial_size), dtype=np.float32)
 
@@ -443,10 +390,8 @@ class PokemonRedEnv(Env):
 
             extracted_crop = self.visit_count_map[y_start:y_end, x_start:x_end].astype(np.float32)
 
-            # Aplicamos el límite de 1000
             clipped_crop = np.clip(extracted_crop, 0, 1000)
 
-            # Rellenamos el 'crop' final con el recorte obtenido, asegurando el tamaño correcto
             out_y_start = self.coords_pad - (c[0] - y_start)
             out_y_end = out_y_start + (y_end - y_start)
             out_x_start = self.coords_pad - (c[1] - x_start)
@@ -454,12 +399,9 @@ class PokemonRedEnv(Env):
 
             crop[out_y_start:out_y_end, out_x_start:out_x_end] = clipped_crop
 
-        # Redimensionamos el 'crop' a las dimensiones de la pantalla principal
-        # Tomamos las dos primeras dimensiones de output_shape_main (altura, ancho)
         target_height, target_width = self.output_shape_main[0], self.output_shape_main[1]
         resized_crop = cv2.resize(crop, (target_width, target_height), interpolation=cv2.INTER_NEAREST)
 
-        # Añadimos una dimensión para el canal, ya que es un mapa de un solo canal
         return np.expand_dims(resized_crop, axis=-1)
 
     
@@ -500,39 +442,29 @@ class PokemonRedEnv(Env):
 
         if region_id not in self.visited_regions:
             self.visited_regions.add(region_id)
-            self.region_count_r += 3
+            self.region_count_r += 2
 
         return self.region_count_r
     
     def get_remaining_in_current_region(self):
         region = self.get_current_region()
 
-        
         if not region:
-            return 1.0  # No estás en ninguna región, asumimos sin explorar
+            return 1.0 
 
         region_id = region["id"]
 
-        # Inicializa el set si aún no existe
         if region_id not in self.region_cells_seen:
             self.region_cells_seen[region_id] = set()
 
-        # Marca la celda como visitada
         self.region_cells_seen[region_id].add((self.x, self.y))
 
-        # Calcula progreso
         w = region["xmax"] - region["xmin"]
         h = region["ymax"] - region["ymin"]
         total_cells = w * h
         visited_cells = len(self.region_cells_seen[region_id])
         
-        # Cálculo del porcentaje explorado
         explored_ratio = visited_cells / total_cells
-
-        # Queremos que: 
-        #   - explored_ratio >= 0.75  -> return 0.0
-        #   - explored_ratio == 0.0   -> return 1.0
-        #   - explored_ratio in (0, 0.75) -> lineal de 1.0 a 0.0
 
         threshold = 0.75
         if explored_ratio >= threshold:
