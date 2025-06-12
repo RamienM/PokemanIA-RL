@@ -3,7 +3,7 @@ headless: true                  # Ejecutar emulación sin mostrar pantalla
 debug: false                    # Mostrar información de depuración por consola
 server: false                   # Modo servidor para control remoto (por ejemplo con sockets)
 load_checkpoint: ""
-notes: "[FINAL FINAL FINAL v2]"
+notes: "[Analisis final 4 nucleos + 100000 pasos + visit map bueno]"
 root_dir: "game&results/Pokemon_red_env/checkpoints"
 
 # === Emulación y entorno ===
@@ -14,17 +14,17 @@ gb_path: "game&results/Pokemon_red_env/PokemonRed.gb"    # Ruta al archivo del j
 
 # === Observación y codificación ===
 actions_stack: 3               # Tamaño del stack de acciones anteriores
-coords_pad: 12                  # Padding aplicado a las coordenadas codificadas
+coords_pad: 18                  # Padding aplicado a las coordenadas codificadas
 
 # === Recompensas y exploración ===
 reward_scale: 1               # Escala de recompensa base
 explore_weight: 0.25            # Peso relativo de la recompensa por explorar
-step_discount: 0.0001
+step_discount: 0.0004
 
 # === Entrenamiento ===
 num_cpu: 4                       # Número de entornos paralelos (subprocesos)
 checkpoint_save_freq: 16384       # Frecuencia para guardar modelo (en pasos)
-max_steps: 1024000                 # Número máximo de pasos por iteración
+max_steps: 102400                 # Número máximo de pasos por iteración
 train_steps_batch: 128
 bach_size: 64
 reward_threshold: -1

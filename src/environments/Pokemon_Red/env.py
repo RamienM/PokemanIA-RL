@@ -61,7 +61,7 @@ class PokemonRedEnv(Env):
                 "badges": spaces.Discrete(8),
                 "events": spaces.MultiBinary(self.memory_reader.get_difference_between_events()),
                 #"map": spaces.Box(low=0, high=255, shape=(self.coords_pad*4,self.coords_pad*4, 1), dtype=np.uint8),
-                "visit_map": spaces.Box(low=0.0, high=1.0, shape=(self.coords_pad*4, self.coords_pad*4, 1), dtype=np.float32),
+                "visit_map": spaces.Box(low=0.0, high=1.0, shape=(self.output_shape_main[0], self.output_shape_main[1], 1), dtype=np.float32),
                 "recent_actions": spaces.MultiDiscrete([len(self.emulator.VALID_ACTIONS)]*self.quantity_action_storage),
                 "remaining_ratio": spaces.Box(low=0, high=1, shape=(1,), dtype=np.float32),
                 #"coords": spaces.Box(low=0, high=np.inf, shape=(3,), dtype=np.int32),
@@ -194,7 +194,7 @@ class PokemonRedEnv(Env):
             "recent_actions": self.recent_actions,
             "remaining_ratio":  np.array([self.get_remaining_in_current_region()], dtype=np.float32),
             #"coords": np.array([self.x,self.y,self.m], dtype=np.int32),
-            "visit_map": self.get_visit_map_crop()[..., None],  # visitas normalizadas
+            "visit_map": self.get_visit_map_crop(),  # visitas normalizadas
             "in_combat": np.array([int(self.is_in_battle)], dtype=np.uint8)
         }
         
@@ -324,10 +324,7 @@ class PokemonRedEnv(Env):
             [val for _, val in self.progress_reward.items()]
         )
 
-        if not self.is_in_battle:
-            new_total -= self.step_count * self.step_discount 
-        else:
-            new_total -= self.step_count * self.step_discount / 5
+        new_total -= self.step_count * self.step_discount 
         new_step = new_total - self.total_reward
 
         self.total_reward = new_total
@@ -337,12 +334,12 @@ class PokemonRedEnv(Env):
     def calculate_reward(self):
         return {
             "event": self.reward_scale * self.memory_reader.read_events_done(),
-            "heal": self.reward_scale * self.total_healing_rew * 0.0003,
+            "heal": self.reward_scale * self.total_healing_rew * 0.0005,
             "dead": self.reward_scale * self.died_count,
             "badge": self.reward_scale * self.batges_in_possesion * 10,
             "explore": self.reward_scale * self.get_exploration_reward() * 2,
             "region": self.reward_scale * self.get_region_reward(),
-            "coord_explored" : self.reward_scale * len(self.seen_coords)*0.001
+            "coord_explored" : self.reward_scale * len(self.seen_coords)*0.02
         }
     
     def update_heal_reward(self):
@@ -429,13 +426,16 @@ class PokemonRedEnv(Env):
 
     def get_visit_map_crop(self):
         """
-        Devuelve el recorte del mapa de visitas, con valores limitados a 1000.
+        Devuelve el recorte del mapa de visitas, con valores limitados a 1000,
+        redimensionado a la forma de la pantalla principal.
         """
         c = self.get_global_coords()
-        crop = np.zeros((self.coords_pad*2, self.coords_pad*2), dtype=np.float32)
+        # El tamaño inicial del crop sigue siendo el doble del padding para la extracción
+        # pero el redimensionamiento final será al tamaño de la pantalla
+        crop_initial_size = self.coords_pad * 2
+        crop = np.zeros((crop_initial_size, crop_initial_size), dtype=np.float32)
 
         if 0 <= c[0] < self.visit_count_map.shape[0] and 0 <= c[1] < self.visit_count_map.shape[1]:
-            # Usamos slice seguro también aquí, como en get_explore_map
             y_start = max(0, c[0] - self.coords_pad)
             y_end = min(self.visit_count_map.shape[0], c[0] + self.coords_pad)
             x_start = max(0, c[1] - self.coords_pad)
@@ -454,9 +454,14 @@ class PokemonRedEnv(Env):
 
             crop[out_y_start:out_y_end, out_x_start:out_x_end] = clipped_crop
 
-        # Ampliamos
-        crop = cv2.resize(crop, (crop.shape[1]*2, crop.shape[0]*2), interpolation=cv2.INTER_NEAREST)
-        return crop
+        # Redimensionamos el 'crop' a las dimensiones de la pantalla principal
+        # Tomamos las dos primeras dimensiones de output_shape_main (altura, ancho)
+        target_height, target_width = self.output_shape_main[0], self.output_shape_main[1]
+        resized_crop = cv2.resize(crop, (target_width, target_height), interpolation=cv2.INTER_NEAREST)
+
+        # Añadimos una dimensión para el canal, ya que es un mapa de un solo canal
+        return np.expand_dims(resized_crop, axis=-1)
+
     
     def get_global_coords(self):
         return local_to_global(self.y, self.x, self.m)
@@ -495,7 +500,7 @@ class PokemonRedEnv(Env):
 
         if region_id not in self.visited_regions:
             self.visited_regions.add(region_id)
-            self.region_count_r += 5
+            self.region_count_r += 3
 
         return self.region_count_r
     
