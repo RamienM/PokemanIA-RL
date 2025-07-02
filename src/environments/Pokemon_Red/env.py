@@ -157,7 +157,6 @@ class PokemonRedEnv(Env):
         self.update_heal_reward()
         self.update_visit_map()
         self.update_events()
-        self.compute_global_stuck()
 
 
         new_reward = self.update_reward()
