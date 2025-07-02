@@ -1,6 +1,10 @@
-#https://datacrystal.tcrf.net/wiki/Pok%C3%A9mon_Red_and_Blue/RAM_map
+# RAM map reference: https://datacrystal.tcrf.net/wiki/Pok%C3%A9mon_Red_and_Blue/RAM_map
 from enum import Enum
 class MemoryAddresses(Enum):
+    """
+    Enum representing memory address locations for various game state variables in Pokémon Red.
+    Useful for reading specific game information directly from emulator RAM.
+    """
     BATTLE_STATE = 0xD057
 
     #---------------------------------MAP---------------------------------

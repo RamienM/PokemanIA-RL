@@ -1,27 +1,29 @@
 @echo off
 setlocal enabledelayedexpansion
 
-title Entrenamiento Pokémon Red - Reinicio automático con checkpoint dinámico
-echo Iniciando entrenamiento en bucle...
+title Pokémon Red Training - Automatic Restart with Dynamic Checkpoint
+echo Starting training loop...
 
 :inicio
 echo --------------------------
-echo Verificando checkpoint previo...
+echo Checking for previous checkpoint...
 echo --------------------------
 
 set "CHECKPOINT_PATH="
 
+REM If a checkpoint path file exists, read the path
 if exist last_checkpoint_path.txt (
     set /p CHECKPOINT_PATH=<last_checkpoint_path.txt
-    echo Checkpoint detectado: !CHECKPOINT_PATH!
+    echo Checkpoint found: !CHECKPOINT_PATH!
 ) else (
-    echo No se encontró checkpoint previo.
+    echo No previous checkpoint found.
 )
 
 echo --------------------------
-echo Ejecutando entrenamiento...
+echo Running training...
 echo --------------------------
 
+REM Run training script with checkpoint path if available
 if defined CHECKPOINT_PATH (
     python train.py "!CHECKPOINT_PATH!"
 ) else (
@@ -29,7 +31,6 @@ if defined CHECKPOINT_PATH (
 )
 
 echo.
-echo Entrenamiento finalizado. Reiniciando en 5 segundos...
+echo Training finished. Restarting in 5 seconds...
 timeout /t 5 >nul
 goto inicio
-

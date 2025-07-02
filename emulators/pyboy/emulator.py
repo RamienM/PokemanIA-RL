@@ -1,9 +1,20 @@
-from pyboy import PyBoy
+from pyboy import PyBoy 
 from pyboy.utils import WindowEvent
 import numpy as np
-import os
 
 class GameEmulator:
+    """
+    Wrapper for the PyBoy Game Boy emulator to interact with a game environment.
+    Allows programmatic control of inputs, loading of game states, and retrieval
+    of screen and memory data.
+
+    Attributes
+    ----------
+    VALID_ACTIONS : dict
+        Maps integer actions to PyBoy input events.
+    REALISE_ACTIONS : dict
+        Maps press events to their corresponding release events.
+    """
 
     VALID_ACTIONS = {
         0: WindowEvent.PRESS_ARROW_DOWN,
@@ -26,38 +37,87 @@ class GameEmulator:
     }
     
     def __init__(self, config):
+        """
+        Initializes the game emulator.
+
+        Parameters
+        ----------
+        config : dict
+            Dictionary containing configuration settings. Must include "gb_path".
+            If "headless" is True, disables the display window.
+            Optionally accepts "emulation_speed".
+        """
         rom_path = config["gb_path"]
         window_type = "null" if config["headless"] else "SDL2"
         emulation_speed = (
-            6 if "emulation_speed" not in config else config["emulation_speed"]
+            5 if "emulation_speed" not in config else config["emulation_speed"]
         )
 
         self.pyboy = PyBoy(rom_path, window=window_type, sound_emulated=False)
         self.pyboy.set_emulation_speed(emulation_speed)
         
-    def step(self,action):
-        if action not in self.VALID_ACTIONS:
-            raise ValueError(f"Acción {action} no válida. Debe estar en {list(self.VALID_ACTIONS.keys())}")
-        
-       
-        button = self.VALID_ACTIONS[action]
-        press_step = 8 # As in their paper
+    def step(self, action):
+        """
+        Performs one step in the environment by simulating a button press and release.
 
-        self.pyboy.send_input(button, True)  # Press the button
+        Parameters
+        ----------
+        action : int
+            Integer corresponding to a valid action in VALID_ACTIONS.
+
+        Raises
+        ------
+        ValueError
+            If the action is not in VALID_ACTIONS.
+        """
+        if action not in self.VALID_ACTIONS:
+            raise ValueError(f"Invalid action {action}. Must be one of {list(self.VALID_ACTIONS.keys())}")
+        
+        button = self.VALID_ACTIONS[action]
+        press_step = 8  # Duration of the press, based on academic paper recommendations
+
+        self.pyboy.send_input(button, True)
         self.pyboy.tick(press_step)
-        self.pyboy.send_input(self.REALISE_ACTIONS[button], False)  # Realise the button
+        self.pyboy.send_input(self.REALISE_ACTIONS[button], False)
         self.pyboy.tick(press_step)
         self.pyboy.tick(1)
     
-    def load_state(self,initial_state):
+    def load_state(self, initial_state):
+        """
+        Loads a saved emulator state.
+
+        Parameters
+        ----------
+        initial_state : str
+            Path to the saved state file.
+        """
         with open(initial_state, "rb") as f:
             self.pyboy.load_state(f)
 
     def get_ram_state(self):
+        """
+        Returns the current state of the emulator's RAM.
+
+        Returns
+        -------
+        pyboy.memory.Memory
+            The memory object giving access to emulator RAM.
+        """
         return self.pyboy.memory
     
     def get_screen(self):
-        return np.expand_dims(self.pyboy.screen.ndarray[:, :, 0], axis=-1)  #(144,160,1)
+        """
+        Retrieves the current screen image as a grayscale NumPy array.
+
+        Returns
+        -------
+        np.ndarray
+            Grayscale screen frame with shape (144, 160, 1).
+        """
+        return np.expand_dims(self.pyboy.screen.ndarray[:, :, 0], axis=-1)
     
     def close(self):
+        """
+        Properly shuts down the emulator.
+        """
         self.pyboy.stop()

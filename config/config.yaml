@@ -1,41 +1,42 @@
 # === General settings ===
-headless: true                  # Ejecutar emulación sin mostrar pantalla
-debug: false                    # Mostrar información de depuración por consola
-server: false                   # Modo servidor para control remoto (por ejemplo con sockets)
+headless: true                  # Run emulation without displaying the screen
+debug: false                    # Show debug information in the console
+server: false                   # Server mode for remote control (e.g., using sockets)
 load_checkpoint: ""
-notes: "[Analisis final 4 nucleos + 100000 pasos + visit map bueno]"
+notes: "[Final analysis 4 cores + 100000 steps + good visit map]"
 root_dir: "game&results/Pokemon_red_env/checkpoints"
 
-# === Emulación y entorno ===
-emulation_speed: 6              # Velocidad de emulación (1 = tiempo real, >1 = acelerado)
-action_freq: 24                 # Cada cuántos frames se aplica una acción
-init_state: "game&results/Pokemon_red_env/STELLE.state"  # Estado inicial para reset
-gb_path: "game&results/Pokemon_red_env/PokemonRed.gb"    # Ruta al archivo del juego
+# === Emulation and environment ===
+emulation_speed: 5              # Emulation speed (1 = real time, >1 = faster)
+action_freq: 24                 # Apply an action every X frames
+init_state: "game&results/Pokemon_red_env/STELLE.state"  # Initial state for reset
+gb_path: "game&results/Pokemon_red_env/PokemonRed.gb"    # Path to game ROM file
 
-# === Observación y codificación ===
-actions_stack: 3               # Tamaño del stack de acciones anteriores
-coords_pad: 18                  # Padding aplicado a las coordenadas codificadas
+# === Observation and encoding ===
+actions_stack: 3                # Number of previous actions to stack
+coords_pad: 18                  # Padding applied to encoded coordinates
 
-# === Recompensas y exploración ===
-reward_scale: 1               # Escala de recompensa base
-explore_weight: 0.25            # Peso relativo de la recompensa por explorar
+# === Rewards and exploration ===
+reward_scale: 1                 # Base reward scale
+explore_weight: 0.25            # Relative weight of the exploration reward
 step_discount: 0.0004
 
-# === Entrenamiento ===
-num_cpu: 4                       # Número de entornos paralelos (subprocesos)
-checkpoint_save_freq: 16384       # Frecuencia para guardar modelo (en pasos)
-max_steps: 102400                 # Número máximo de pasos por iteración
+# === Training ===
+num_cpu: 4                      # Number of parallel environments (threads)
+checkpoint_save_freq: 16384    # Steps between model checkpoints
+max_steps: 102400               # Maximum number of steps per iteration
 train_steps_batch: 128
 bach_size: 64
 reward_threshold: -1
 
-# === Logging & sesiones ===
-print_rewards: false            # Mostrar recompensas en consola durante entrenamiento
-save_video: false               # Guardar video de episodios
+# === Logging & sessions ===
+print_rewards: false            # Print rewards to console during training
+save_video: false               # Save video of episodes
 progress_bar: false
 save_stats_every: 1
 
 # === WandB (Weights & Biases) ===
-use_wandb: false                 # Habilitar tracking con WandB
-wandb_project: pokemon-train    # Nombre del proyecto WandB
+use_wandb: false                # Enable tracking with WandB
+wandb_project: pokemon-train    # WandB project name
+
 

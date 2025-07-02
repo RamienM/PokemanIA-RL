@@ -39,58 +39,77 @@ import multiprocessing as mp
 
 def make_env(rank,session_path, config,  request_q, response_q, seed=0):
     """
-    Utility function for multiprocessed env.
-    :param env_id: (str) the environment ID
-    :param num_env: (int) the number of environments you wish to have in subprocesses
-    :param seed: (int) the initial seed for RNG
-    :param rank: (int) index of the subprocess
+    Utility function to create a multiprocess environment.
+    
+    Args:
+        rank (int): Index of the subprocess.
+        session_path (str): Path for saving videos and logs.
+        config (dict): Configuration dictionary.
+        request_q (multiprocessing.Queue): Queue to send inference requests.
+        response_q (multiprocessing.Queue): Queue to receive inference responses.
+        seed (int): Seed for RNG to ensure reproducibility.
+    
+    Returns:
+        Callable that initializes and returns the environment instance.
     """
     def _init():
+        # Initialize emulator and memory reader
         emulator = GameEmulator(config)
         memory_reader = MemoryReader(emulator)
+        
+        # Choose shared vision model if server mode enabled, otherwise create own model
         if config.get("server", False):
-            print(f"[ENV - {rank}] Usando modelo de visión compartido")
+            print(f"[ENV - {rank}] Using shared vision model")
             vision_model = SharedInferencer(request_q, response_q)
         else:
-            print(f"[ENV - {rank}] Usando modelo de visión propio")
+            print(f"[ENV - {rank}] Using own vision model")
             vision_model = STELLEInferencer()
+        
+        # Optionally set up video recording
         video_recorder = None
-        if config.get("save_video",False):
-            save_path = os.path.join(session_path,"videos",f"env_{rank}")
+        if config.get("save_video", False):
+            save_path = os.path.join(session_path, "videos", f"env_{rank}")
             os.makedirs(save_path, exist_ok=True)
             video_recorder = VideoRecorder(save_path=save_path)
+        
+        # Create environment wrapped with streaming metadata for monitoring/logging
         env = StreamWrapper(
-            PokemonRedEnv(emulator,memory_reader, vision_model,video_recorder,config), 
-            stream_metadata = { # All of this is part is optional
-                "user": "Ramien", # choose your own username
-                "env_id": rank, # environment identifier
-                "color": "#7A378B", # choose your color :)
-                "extra": "STELLE", # any extra text you put here will be displayed,
-                "sprite_id": 4 ## Prueba
+            PokemonRedEnv(emulator, memory_reader, vision_model, video_recorder, config), 
+            stream_metadata={
+                "user": "Ramien",
+                "env_id": rank,
+                "color": "#7A378B",
+                "extra": "STELLE",
+                "sprite_id": 4
             }
         )
+        
+        # Reset environment with unique seed for each subprocess
         env.reset(seed=(seed + rank))
         return env
+    
+    # Set random seed for reproducibility
     set_random_seed(seed)
     return _init
 
 if __name__ == "__main__":
 
+    # Set multiprocessing start method (spawn is safer)
     mp.set_start_method("spawn", force=True) 
 
-    # --------- Obteining configuration -----------------
+    # Load configuration from YAML file
     with open("config/config.yaml", "r") as file:
         config = yaml.safe_load(file)
 
-    
+    # Number of CPUs/environments to run in parallel
     num_cpu = config.get("num_cpu", 1)
 
+    # Checkpoint file to load, priority: command-line argument > config file
     checkpoint_from_yaml =config.get("load_checkpoint", "")
     checkpoint_arg = sys.argv[1] if len(sys.argv) > 1 else None
-
-    # Priorizar argumento si existe
     file_name = checkpoint_arg if checkpoint_arg else checkpoint_from_yaml
 
+    # Training parameters derived from config and number of CPUs
     ep_length = config.get("max_steps", 1000000) * num_cpu
     train_steps_batch = config.get("train_steps_batch", ep_length // 1024) 
     batch_size = config.get("batch_size", ep_length//256)
@@ -102,7 +121,7 @@ if __name__ == "__main__":
     use_wandb_logging = config.get("use_wandb", True)
 
     
-    # --------- Creating paths and directories -----------------
+    # Setup session directory and timestamp for saving results and logs
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     sess_id = f"poke_{timestamp}"
 
@@ -115,8 +134,7 @@ if __name__ == "__main__":
     os.makedirs(sess_path_logs, exist_ok=True)
     os.makedirs(agent_stats_dir, exist_ok=True)
 
-    # --------- Starting queues -----------------
-
+    # Start inference server and queues if server mode enabled
     if server_enabled:
         manager = mp.Manager()
         request_q = manager.Queue()
@@ -131,7 +149,7 @@ if __name__ == "__main__":
     else:
         env = SubprocVecEnv([make_env(i,base_dir,  config,  None, None) for i in range(num_cpu)])
 
-    # --------- General training information -----------------
+    # Save metadata about the training run
     metadata = {
         "session_id": sess_id,
         "checkpoint_freq": config.get("checkpoint_save_freq", 64),
@@ -145,8 +163,7 @@ if __name__ == "__main__":
     with open(metadata_path, "w") as f:
         json.dump(metadata, f, indent=4)
     
-    # --------- Preparing Callbacks -----------------
-    
+    # Prepare callbacks for checkpoints, logging, cleaning, and reward monitoring
     callbacks = [
         CheckpointCallback(save_freq=config.get("checkpoint_save_freq", 64),save_path=base_dir,name_prefix=sess_id), 
         TensorboardCallback(sess_path_logs,num_cpu), 
@@ -155,7 +172,7 @@ if __name__ == "__main__":
         RewardThresholdCallback(reward_threshold=config.get("reward_threshold",-100))
     ]
 
-    ## --------- Starting Weight&Bias -----------------
+    # Initialize Weights & Biases logging if enabled
     if use_wandb_logging:
         wandb.tensorboard.patch(root_logdir=str(sess_path_logs))
         run = wandb.init(
@@ -171,32 +188,46 @@ if __name__ == "__main__":
         callbacks.append(WandbCallback())
 
 
-    # --------- Init agent model -----------------
-    model = PPOAgent(env=env, policy="MultiInputPolicy", verbose=1, n_steps=train_steps_batch, batch_size=batch_size, n_epochs=1, gamma=0.997, ent_coef=0.01, tensorboard_log=sess_path_logs)
-    if os.path.exists(file_name + ".zip"):
-        print("[TRAIN] Cargando punto de guardado...")
-        model.load(path=file_name, env=env)  # Cargar el modelo desde el checkpoint
-        print(f"[TRAIN] Punto de guardado {file_name}.zip cargado.")
-    
-    # --------- Training -----------------
+    # Initialize PPO agent with specified hyperparameters
+    model = PPOAgent(
+        env=env,
+        policy="MultiInputPolicy",
+        verbose=1,
+        n_steps=train_steps_batch,
+        batch_size=batch_size,
+        n_epochs=1,
+        gamma=0.997,
+        ent_coef=0.01,
+        tensorboard_log=sess_path_logs
+    )
 
-    print(f"[TRAIN] Iniciando el entrenamiento")
-    model.train(total_timesteps=ep_length , callbacks=CallbackList(callbacks),progress_bar=progress_bar)
-    print(f"[TRAIN] Se ha finalizado el entrenamiento ")
+    # Load checkpoint if available
+    if os.path.exists(file_name + ".zip"):
+        print("[TRAIN] Loading checkpoint...")
+        model.load(path=file_name, env=env)
+        print(f"[TRAIN] Loaded checkpoint {file_name}.zip")
+
+    # Start training
+    print("[TRAIN] Starting training")
+    model.train(total_timesteps=ep_length, callbacks=CallbackList(callbacks), progress_bar=progress_bar)
+    print("[TRAIN] Training finished")
         
-    # --------- Closing enviroments, queues and weight&bias -----------------
+    # Cleanup after training
     env.close()
 
+    # Save the final model checkpoint
     last_checkpoint_path = os.path.join(base_dir, "final")
-
-    ## --------- Saving model -----------------
     model.save(last_checkpoint_path)
+
+    # Save the path of the last checkpoint for future reference
     with open("last_checkpoint_path.txt", "w") as f:
         f.write(last_checkpoint_path)
 
+    # Signal inference server process to stop if running
     if server_enabled:
         request_q.put((None, None, None)) 
         inference_proc.join()
 
+    # Finish wandb run
     if use_wandb_logging:
         run.finish()

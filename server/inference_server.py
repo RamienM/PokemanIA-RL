@@ -1,21 +1,34 @@
-import multiprocessing as mp
 from models.segmentation.STELLE_Pokemon_Segmentation.inference.inferencer import STELLEInferencer
 
 def inference_process(request_queue):
     """
-    Servidor de inferencia: un solo proceso, carga STELLEInferencer una vez.
-    Espera tuplas (uid, np_image, response_queue), procesa y devuelve en response_queue.
+    Inference server process.
+
+    This function is intended to be run in a separate process.
+    It loads the STELLEInferencer model once and listens for image inference requests
+    from a shared multiprocessing queue.
+
+    Each request should be a tuple: (uid, np_image, response_queue)
+        - uid: Unique identifier of the request.
+        - np_image: Numpy image to perform inference on.
+        - response_queue: Queue to send the result back to the client.
+
+    The server continues to run until it receives a request with uid=None,
+    which is used as a signal to stop the process.
     """
-    print("[Inferencia] Cargando modelo...")
+    print("[Inference] Loading model...")
     inferencer = STELLEInferencer()
-    print("[Inferencia] Modelo cargado.")
+    print("[Inference] Model loaded.")
 
     while True:
         uid, image, resp_q = request_queue.get()
-        # STOP: uid None
+
+        # Stop signal: uid is None
         if uid is None:
             break
-        # run inference
+
+        # Run inference on the received image
         result = inferencer.predict(image)
-        # devolver al cliente específico
+
+        # Return the result to the client via the provided response queue
         resp_q.put((uid, result))
