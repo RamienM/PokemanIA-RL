@@ -27,10 +27,17 @@ To start training, run one of the following commands:
      ```bash
        python train.py
      ````
-- **Endless training loop** (until manually stopped):
-     ```bash
-       non_stop_train.bat
-     ````
+- **Endless training loop** (runs until manually stopped):
+  - On Windows, run:
+    ```bash
+    train_loop.bat
+    ```
+
+  - On Linux, run:
+    ```bash
+    train_loop.sh
+    ```
+
   ✨ **Tip**: Before training, check and adjust the settings in *config.yml* to suit your preferences.
 
 ## 📊 Visualization
