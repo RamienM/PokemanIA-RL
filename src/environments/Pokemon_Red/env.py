@@ -35,14 +35,9 @@ class PokemonRedEnv(Env):
         ##--------- Config -----------------
         # General environment configuration
         self.print_rewards = config["print_rewards"]
-        self.headless = config["headless"] # Not directly used in the provided snippet but good to keep
         self.init_state = config["init_state"] # Initial game state file
-        self.act_freq = config["action_freq"] # How often actions are performed (not directly used here for step)
         
         # Observation space related configurations
-        self.enc_freqs = (
-            5 if "fourier_encode_freq" not in config else config["fourier_encode_freq"]
-        ) # Not directly used in this snippet
         self.quantity_action_storage = (
             5 if "actions_stack" not in config else config["actions_stack"]
         ) # Number of recent actions to store
@@ -160,14 +155,12 @@ class PokemonRedEnv(Env):
         self.last_party_size = 0 # Number of Pokémon in the party in the previous step
         self.step_count = 0 # Counter for steps in the current episode
         self.region_count_r = 0 # Reward for entering new regions
-        self.stuck = 0 # Not directly used in the snippet, but could be for stuck detection
 
         self.is_in_battle = False # Flag to indicate if the player is in a battle
         self.batges_in_possesion = 0 # Number of badges obtained
         self.x, self.y, self.m = 0, 0, 0 # Player's coordinates (x, y) and map ID (m)
 
         # Event tracking
-        self.base_event_flags = self.memory_reader.read_events_done() # Events done at reset
         self.all_event_flags_set_history = set() # Set of all event flags that have been activated
         self.current_new_events = [] # List of new events activated in the current step
         self.last_recorded_event_description = [] # Description of the last new event(s)
