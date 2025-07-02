@@ -1,40 +1,55 @@
 import matplotlib.pyplot as plt
 
 class ProgressPlotter:
-    def __init__(self):
-        # Configuración de la figura
-        self.fig, self.ax = plt.subplots(figsize=(8, 6))
-        self.ax.set_title('Progreso de Recompensas')
-        self.ax.set_xlabel('Pasos')
-        self.ax.set_ylabel('Valor')
+    """
+    Class for plotting the progress of rewards over steps using matplotlib.
 
-        # Inicialización de listas para almacenar los valores
+    It maintains internal lists of steps, total rewards, and individual progress rewards,
+    and updates the plot dynamically.
+    """
+    def __init__(self):
+        # Set up the figure and axes
+        self.fig, self.ax = plt.subplots(figsize=(8, 6))
+        self.ax.set_title('Reward Progress')
+        self.ax.set_xlabel('Steps')
+        self.ax.set_ylabel('Value')
+
+        # Initialize lists to store step counts and rewards
         self.steps = []
-        self.rewards = []
-        self.total_rewards = []
+        self.rewards = []        # Stores individual rewards as lists
+        self.total_rewards = []  # Stores total rewards
 
     def update_plot(self, step_count, progress_reward, total_reward):
-        # Agregar los nuevos valores a las listas
+        """
+        Update the plot with new data points.
+
+        :param step_count: Current step number
+        :param progress_reward: Dictionary of individual reward components keyed by name
+        :param total_reward: Total reward value at current step
+        """
+        # Append new data to the internal lists
         self.steps.append(step_count)
         self.total_rewards.append(total_reward)
-        self.rewards.append(list(progress_reward.values()))  # Guardamos las recompensas individuales
+        self.rewards.append(list(progress_reward.values()))  # Save individual rewards as list
 
-        # Limpiamos el gráfico y lo actualizamos
+        # Clear the axes to redraw
         self.ax.clear()
-        self.ax.set_title('Progreso de Recompensas')
-        self.ax.set_xlabel('Pasos')
-        self.ax.set_ylabel('Valor')
+        self.ax.set_title('Reward Progress')
+        self.ax.set_xlabel('Steps')
+        self.ax.set_ylabel('Value')
 
-        # Graficamos las recompensas
-        self.ax.plot(self.steps, self.total_rewards, label="Recompensa Total", color="blue")
+        # Plot total rewards in blue
+        self.ax.plot(self.steps, self.total_rewards, label="Total Reward", color="blue")
         
-        # Graficamos las recompensas individuales por cada clave
+        # Plot each individual reward over steps with separate lines
         for idx, key in enumerate(progress_reward.keys()):
-            self.ax.plot(self.steps, [r[idx] for r in self.rewards], label=key)
+            # Extract reward values for this key across all recorded steps
+            reward_values = [r[idx] for r in self.rewards]
+            self.ax.plot(self.steps, reward_values, label=key)
 
-        # Añadimos leyenda
+        # Add legend to identify lines
         self.ax.legend()
 
-        # Actualizamos la pantalla
+        # Refresh the plot display with a small pause for animation effect
         plt.draw()
         plt.pause(0.1)

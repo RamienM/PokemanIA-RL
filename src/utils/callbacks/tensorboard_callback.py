@@ -1,5 +1,4 @@
 import os
-import json
 
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import Image
@@ -8,13 +7,22 @@ import numpy as np
 from einops import rearrange, reduce
 
 def merge_dicts(dicts):
+    """
+    Merges a list of dictionaries by computing the mean of numeric values for each key,
+    and also returns the distribution of values per key as numpy arrays.
+
+    :param dicts: List of dictionaries to merge.
+    :return: Tuple (mean_dict, distrib_dict) where
+             mean_dict contains the mean values per key,
+             distrib_dict contains the numpy arrays of values per key.
+    """
     sum_dict = {}
     count_dict = {}
     distrib_dict = {}
 
     for d in dicts:
         for k, v in d.items():
-            if isinstance(v, (int, float)): 
+            if isinstance(v, (int, float)):
                 sum_dict[k] = sum_dict.get(k, 0) + v
                 count_dict[k] = count_dict.get(k, 0) + 1
                 distrib_dict.setdefault(k, []).append(v)
@@ -26,9 +34,22 @@ def merge_dicts(dicts):
 
     return mean_dict, distrib_dict
 
+
 class TensorboardCallback(BaseCallback):
+    """
+    Callback adapted from "https://github.com/PWhiddy/PokemonRedExperiments/blob/master/v2/tensorboard_callback.py"
+    Logs agent statistics from multiple parallel environments to TensorBoard, including
+    scalar summaries and histograms of distributions. Also saves exploration maps at training end.
+    """
 
     def __init__(self, log_dir, num_envs, verbose=0):
+        """
+        Initializes the TensorBoard callback.
+
+        :param log_dir: Directory path to save TensorBoard logs.
+        :param num_envs: Number of parallel environments.
+        :param verbose: Verbosity level.
+        """
         super().__init__(verbose)
         self.log_dir = log_dir
         self.writer = None
@@ -36,19 +57,31 @@ class TensorboardCallback(BaseCallback):
         self.step_counters = [0] * num_envs
 
     def _on_training_start(self):
+        """
+        Creates a TensorBoard SummaryWriter at the start of training if not already created.
+        """
         if self.writer is None:
             self.writer = SummaryWriter(log_dir=os.path.join(self.log_dir, 'histogram'))
 
     def _on_step(self) -> bool:
+        """
+        Called at every environment step.
+        Retrieves agent stats from each environment, merges them,
+        logs scalar mean values and histograms of distributions to TensorBoard.
+
+        :return: True to continue training.
+        """
         envs = self.model.get_env()
         dicts = []
-    
+
+        # Collect stats dictionaries from each environment
         for env_idx in range(self.num_envs):
             dicts.append(envs.env_method("get_agent_stats", indices=env_idx)[0])
 
-        # Calcular promedios y distribuciones
+        # Compute means and distributions for each metric key
         mean_infos, distributions = merge_dicts(dicts)
 
+        # Log mean scalar values and distributions as histograms
         for key, val in mean_infos.items():
             self.logger.record(f"env_stats/{key}", val)
             self.writer.add_scalar(f"env_stats/{key}", val, self.num_timesteps)
@@ -59,37 +92,36 @@ class TensorboardCallback(BaseCallback):
 
         return True
 
-
-    
     def _on_training_end(self):
-        # Guardar mapas de exploración derivados del visit_count_map al final del entrenamiento
-
-        # 1. Obtener los visit_count_map de todos los entornos paralelos
-        # Esto asume que self.training_env es un VecEnv y get_attr devolverá una lista de mapas.
+        """
+        Called at the end of training.
+        Retrieves visit_count_maps from all environments,
+        converts them into exploration maps, and logs them as images.
+        Closes the TensorBoard writer.
+        """
+        # Retrieve visit count maps from all parallel environments
         all_visit_maps = self.training_env.get_attr("visit_count_map")
 
-        # 2. Convertir cada visit_count_map a su representación de "mapa de exploración"
-        # Donde un valor > 0 en visit_count_map se convierte en 255 (explorado), y 0 en 0.
-        # Stackeamos todos los mapas derivados en un solo array numpy.
+        # Convert visit_count_maps to binary exploration maps (255 = explored, 0 = unexplored)
         explore_maps_derived = np.array([(vm > 0).astype(np.uint8) * 255 for vm in all_visit_maps])
 
-        # 3. Usar el 'explore_maps_derived' para las operaciones de registro
-        # map_sum: Reduce todos los mapas derivados en un solo mapa consolidado (máximo de píxeles)
+        # Aggregate exploration maps using max over parallel envs to create consolidated map
         map_sum = reduce(explore_maps_derived, "f h w -> h w", "max")
         self.logger.record("trajectory/explore_sum", Image(map_sum, "HW"), exclude=("stdout", "log", "json", "csv"))
 
-        # map_row: Reorganiza los mapas derivados en una única imagen grande para visualización
+        # Arrange exploration maps in a grid for visualization
         if explore_maps_derived.shape[0] == 1:
-            map_row = explore_maps_derived.squeeze(0) # Si solo hay un entorno, quita la dimensión 'f'
+            # Single environment: remove the 'f' dimension
+            map_row = explore_maps_derived.squeeze(0)
         else:
+            # Multiple environments: arrange maps in a 2-row grid for display
             map_row = rearrange(explore_maps_derived, "(r f) h w -> (r h) (f w)", r=2)
 
         self.logger.record("trajectory/explore_map", Image(map_row, "HW"), exclude=("stdout", "log", "json", "csv"))
 
-        # Dump final para asegurar que se guardan
+        # Flush logger to ensure all logs are written
         self.logger.dump(self.n_calls)
 
+        # Close the TensorBoard writer to free resources
         if self.writer:
             self.writer.close()
-
-
